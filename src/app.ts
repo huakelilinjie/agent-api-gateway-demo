@@ -9,16 +9,19 @@ import { createTaskMcpHandler } from './mcp/taskMcpServer.js';
 import { InMemoryTaskRepository } from './repository/inMemoryTaskRepository.js';
 import { verifierFromEnv } from './security/auth.js';
 import { TaskService } from './services/taskService.js';
+import { taskPolicyFromEnv, type TaskPolicy } from './services/taskPolicy.js';
 
 export interface AppDependencies {
   taskService?: TaskService;
+  taskPolicy?: TaskPolicy;
   tokenVerifier?: OAuthTokenVerifier;
   idempotencyStore?: InMemoryIdempotencyStore;
 }
 
 export function createApp(dependencies: AppDependencies = {}): Express {
   const app = createMcpExpressApp();
-  const taskService = dependencies.taskService ?? new TaskService(new InMemoryTaskRepository());
+  const taskService =
+    dependencies.taskService ?? new TaskService(new InMemoryTaskRepository(), dependencies.taskPolicy ?? taskPolicyFromEnv());
   const tokenVerifier = dependencies.tokenVerifier ?? verifierFromEnv();
   const idempotencyStore = dependencies.idempotencyStore ?? new InMemoryIdempotencyStore();
 

@@ -1,12 +1,17 @@
 import type { Task, TaskRepository } from '../domain/task.js';
+import { AllowAllTaskPolicy, type TaskPolicy } from './taskPolicy.js';
 
 export class TaskService {
-  constructor(private readonly repository: TaskRepository) {}
+  constructor(
+    private readonly repository: TaskRepository,
+    private readonly policy: TaskPolicy = new AllowAllTaskPolicy()
+  ) {}
 
   async create(title: string): Promise<Task> {
     const normalized = title.trim();
     if (!normalized) throw new TaskValidationError('title must not be empty');
     if (normalized.length > 200) throw new TaskValidationError('title must be 200 characters or fewer');
+    await this.policy.check(normalized);
     return this.repository.create({ title: normalized });
   }
 

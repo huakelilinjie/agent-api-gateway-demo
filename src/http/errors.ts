@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { IdempotencyConflictError } from '../idempotency/idempotencyStore.js';
 import { OptimisticLockError } from '../repository/inMemoryTaskRepository.js';
 import { TaskNotFoundError, TaskValidationError } from '../services/taskService.js';
+import { TaskPolicyRejectedError } from '../services/taskPolicy.js';
 
 export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error instanceof ZodError) {
@@ -14,6 +15,10 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   }
   if (error instanceof TaskValidationError) {
     res.status(400).json({ error: 'invalid_request', message: error.message });
+    return;
+  }
+  if (error instanceof TaskPolicyRejectedError) {
+    res.status(422).json({ error: 'policy_rejected', message: error.message });
     return;
   }
   if (error instanceof TaskNotFoundError) {
