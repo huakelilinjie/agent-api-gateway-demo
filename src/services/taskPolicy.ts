@@ -32,8 +32,8 @@ export class HttpTaskPolicy implements TaskPolicy {
 
   async check(title: string): Promise<void> {
     const response = await withRetry(
-      () =>
-        withTimeout(
+      async () => {
+        const current = await withTimeout(
           signal =>
             this.fetchImpl(this.options.url, {
               method: 'POST',
@@ -42,7 +42,10 @@ export class HttpTaskPolicy implements TaskPolicy {
               signal
             }),
           this.options.timeoutMs
-        ),
+        );
+        if (!current.ok) throw new PolicyHttpError(current.status);
+        return current;
+      },
       {
         attempts: this.options.attempts,
         baseDelayMs: 50,
@@ -51,7 +54,6 @@ export class HttpTaskPolicy implements TaskPolicy {
       }
     );
 
-    if (!response.ok) throw new PolicyHttpError(response.status);
     const body = (await response.json()) as { allowed?: boolean; reason?: string };
     if (body.allowed !== true) throw new TaskPolicyRejectedError(body.reason ?? 'task rejected by policy service');
   }
