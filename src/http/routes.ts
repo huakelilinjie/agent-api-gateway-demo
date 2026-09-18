@@ -14,6 +14,13 @@ const completeTaskSchema = z.object({
   expectedVersion: z.number().int().positive().optional()
 });
 
+function pathParam(value: string | string[] | undefined, name: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`missing path parameter: ${name}`);
+  }
+  return value;
+}
+
 export function createTaskRouter(
   taskService: TaskService,
   verifier: OAuthTokenVerifier,
@@ -63,7 +70,7 @@ export function createTaskRouter(
 
   router.get('/:id', requireRestScope(verifier, 'tasks:read'), async (req, res, next) => {
     try {
-      res.json(await taskService.get(req.params.id));
+      res.json(await taskService.get(pathParam(req.params.id, 'id')));
     } catch (error) {
       next(error);
     }
@@ -72,7 +79,7 @@ export function createTaskRouter(
   router.post('/:id/complete', requireRestScope(verifier, 'tasks:write'), async (req, res, next) => {
     try {
       const input = completeTaskSchema.parse(req.body ?? {});
-      const task = await taskService.complete(req.params.id, input.expectedVersion);
+      const task = await taskService.complete(pathParam(req.params.id, 'id'), input.expectedVersion);
       audit({
         action: 'task.complete',
         actor: String(res.locals.auth.clientId),

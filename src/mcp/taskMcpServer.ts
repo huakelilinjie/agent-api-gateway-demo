@@ -1,7 +1,8 @@
-import { createMcpHandler, McpServer, requireScopes, type AuthInfo } from '@modelcontextprotocol/server';
+import { createMcpHandler, McpServer, type AuthInfo } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { InMemoryIdempotencyStore } from '../idempotency/idempotencyStore.js';
 import { audit } from '../observability/audit.js';
+import { hasScope, type Scope } from '../security/auth.js';
 import type { TaskService } from '../services/taskService.js';
 
 function text(value: unknown) {
@@ -13,6 +14,10 @@ function caller(authInfo: AuthInfo | undefined): string {
   return authInfo.clientId;
 }
 
+function denied(scope: Scope) {
+  return { isError: true as const, content: text({ error: 'insufficient_scope', requiredScope: scope }) };
+}
+
 export function createTaskMcpHandler(taskService: TaskService, idempotencyStore: InMemoryIdempotencyStore) {
   return createMcpHandler(() => {
     const server = new McpServer({ name: 'agent-api-gateway-demo', version: '1.0.0' });
@@ -22,10 +27,12 @@ export function createTaskMcpHandler(taskService: TaskService, idempotencyStore:
       {
         description: 'List tasks visible to the authenticated caller.',
         inputSchema: z.object({}),
-        scopeChallenge: requireScopes('tasks:read'),
         annotations: { readOnlyHint: true }
       },
-      async () => ({ content: text({ tasks: await taskService.list() }) })
+      async (_args, ctx) => {
+        if (!hasScope(ctx.http?.authInfo, 'tasks:read')) return denied('tasks:read');
+        return { content: text({ tasks: await taskService.list() }) };
+      }
     );
 
     server.registerTool(
@@ -33,10 +40,10 @@ export function createTaskMcpHandler(taskService: TaskService, idempotencyStore:
       {
         description: 'Get one task by id.',
         inputSchema: z.object({ id: z.string().uuid() }),
-        scopeChallenge: requireScopes('tasks:read'),
         annotations: { readOnlyHint: true }
       },
-      async ({ id }) => {
+      async ({ id }, ctx) => {
+        if (!hasScope(ctx.http?.authInfo, 'tasks:read')) return denied('tasks:read');
         try {
           return { content: text(await taskService.get(id)) };
         } catch (error) {
@@ -52,10 +59,10 @@ export function createTaskMcpHandler(taskService: TaskService, idempotencyStore:
         inputSchema: z.object({
           title: z.string().trim().min(1).max(200),
           idempotencyKey: z.string().min(1).max(128)
-        }),
-        scopeChallenge: requireScopes('tasks:write')
+        })
       },
       async ({ title, idempotencyKey }, ctx) => {
+        if (!hasScope(ctx.http?.authInfo, 'tasks:write')) return denied('tasks:write');
         try {
           const authInfo = ctx.http?.authInfo;
           const fingerprint = InMemoryIdempotencyStore.fingerprint({ title });
@@ -87,10 +94,10 @@ export function createTaskMcpHandler(taskService: TaskService, idempotencyStore:
         inputSchema: z.object({
           id: z.string().uuid(),
           expectedVersion: z.number().int().positive().optional()
-        }),
-        scopeChallenge: requireScopes('tasks:write')
+        })
       },
       async ({ id, expectedVersion }, ctx) => {
+        if (!hasScope(ctx.http?.authInfo, 'tasks:write')) return denied('tasks:write');
         try {
           const task = await taskService.complete(id, expectedVersion);
           audit({

@@ -65,14 +65,14 @@ export function verifierFromEnv(env: NodeJS.ProcessEnv = process.env): OAuthToke
 export function requireRestScope(verifier: OAuthTokenVerifier, scope: Scope): RequestHandler {
   return async (req, res, next) => {
     const header = req.header('authorization');
-    const match = header?.match(/^Bearer\s+(.+)$/i);
-    if (!match) {
+    const token = header?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!token) {
       res.status(401).json({ error: 'invalid_token' });
       return;
     }
 
     try {
-      const auth = await verifier.verifyAccessToken(match[1]);
+      const auth = await verifier.verifyAccessToken(token);
       if (!auth.scopes.includes(scope)) {
         res.status(403).json({ error: 'insufficient_scope', requiredScope: scope });
         return;
@@ -83,4 +83,8 @@ export function requireRestScope(verifier: OAuthTokenVerifier, scope: Scope): Re
       res.status(401).json({ error: 'invalid_token' });
     }
   };
+}
+
+export function hasScope(authInfo: AuthInfo | undefined, scope: Scope): boolean {
+  return Boolean(authInfo?.scopes.includes(scope));
 }
