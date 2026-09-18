@@ -73,3 +73,17 @@ describe('task REST API', () => {
     expect(conflict.body.error).toBe('version_conflict');
   });
 });
+
+describe('request correlation', () => {
+  it('preserves a safe caller request id', async () => {
+    const app = createApp({ tokenVerifier: testTokenVerifier });
+    const response = await request(app).get('/health').set('X-Request-Id', 'trace-123').expect(200);
+    expect(response.headers['x-request-id']).toBe('trace-123');
+  });
+
+  it('replaces an unsafe request id', async () => {
+    const app = createApp({ tokenVerifier: testTokenVerifier });
+    const response = await request(app).get('/health').set('X-Request-Id', 'bad id with spaces').expect(200);
+    expect(response.headers['x-request-id']).not.toBe('bad id with spaces');
+  });
+});

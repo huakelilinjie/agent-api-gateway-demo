@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { InMemoryIdempotencyStore } from '../idempotency/idempotencyStore.js';
+import { audit } from '../observability/audit.js';
 import { requireRestScope } from '../security/auth.js';
 import type { TaskService } from '../services/taskService.js';
 
@@ -41,6 +42,15 @@ export function createTaskRouter(
       const fingerprint = InMemoryIdempotencyStore.fingerprint(input);
       const result = await idempotencyStore.execute(subject, key, fingerprint, () => taskService.create(input.title));
 
+      audit({
+        action: 'task.create',
+        actor: subject,
+        resourceType: 'task',
+        resourceId: result.value.id,
+        outcome: 'success',
+        details: { transport: 'rest', idempotencyReplayed: result.replayed }
+      });
+
       res
         .status(result.replayed ? 200 : 201)
         .set('Idempotency-Replayed', String(result.replayed))
@@ -62,7 +72,16 @@ export function createTaskRouter(
   router.post('/:id/complete', requireRestScope(verifier, 'tasks:write'), async (req, res, next) => {
     try {
       const input = completeTaskSchema.parse(req.body ?? {});
-      res.json(await taskService.complete(req.params.id, input.expectedVersion));
+      const task = await taskService.complete(req.params.id, input.expectedVersion);
+      audit({
+        action: 'task.complete',
+        actor: String(res.locals.auth.clientId),
+        resourceType: 'task',
+        resourceId: task.id,
+        outcome: 'success',
+        details: { transport: 'rest', version: task.version }
+      });
+      res.json(task);
     } catch (error) {
       next(error);
     }

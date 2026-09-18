@@ -1,6 +1,7 @@
 import { createMcpHandler, McpServer, requireScopes, type AuthInfo } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { InMemoryIdempotencyStore } from '../idempotency/idempotencyStore.js';
+import { audit } from '../observability/audit.js';
 import type { TaskService } from '../services/taskService.js';
 
 function text(value: unknown) {
@@ -64,6 +65,14 @@ export function createTaskMcpHandler(taskService: TaskService, idempotencyStore:
             fingerprint,
             () => taskService.create(title)
           );
+          audit({
+            action: 'task.create',
+            actor: caller(authInfo),
+            resourceType: 'task',
+            resourceId: result.value.id,
+            outcome: 'success',
+            details: { transport: 'mcp', idempotencyReplayed: result.replayed }
+          });
           return { content: text({ ...result.value, idempotencyReplayed: result.replayed }) };
         } catch (error) {
           return { isError: true, content: text({ error: error instanceof Error ? error.message : 'unknown error' }) };
@@ -81,9 +90,18 @@ export function createTaskMcpHandler(taskService: TaskService, idempotencyStore:
         }),
         scopeChallenge: requireScopes('tasks:write')
       },
-      async ({ id, expectedVersion }) => {
+      async ({ id, expectedVersion }, ctx) => {
         try {
-          return { content: text(await taskService.complete(id, expectedVersion)) };
+          const task = await taskService.complete(id, expectedVersion);
+          audit({
+            action: 'task.complete',
+            actor: caller(ctx.http?.authInfo),
+            resourceType: 'task',
+            resourceId: task.id,
+            outcome: 'success',
+            details: { transport: 'mcp', version: task.version }
+          });
+          return { content: text(task) };
         } catch (error) {
           return { isError: true, content: text({ error: error instanceof Error ? error.message : 'unknown error' }) };
         }

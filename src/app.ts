@@ -6,6 +6,7 @@ import { errorHandler } from './http/errors.js';
 import { createTaskRouter } from './http/routes.js';
 import { InMemoryIdempotencyStore } from './idempotency/idempotencyStore.js';
 import { createTaskMcpHandler } from './mcp/taskMcpServer.js';
+import { requestContextMiddleware } from './observability/requestContext.js';
 import { InMemoryTaskRepository } from './repository/inMemoryTaskRepository.js';
 import { verifierFromEnv } from './security/auth.js';
 import { TaskService } from './services/taskService.js';
@@ -26,6 +27,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const idempotencyStore = dependencies.idempotencyStore ?? new InMemoryIdempotencyStore();
 
   app.disable('x-powered-by');
+  app.use(requestContextMiddleware);
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
