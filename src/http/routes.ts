@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
+import { requireRestScope } from '../security/auth.js';
 import type { TaskService } from '../services/taskService.js';
 
 const createTaskSchema = z.object({
@@ -10,10 +12,10 @@ const completeTaskSchema = z.object({
   expectedVersion: z.number().int().positive().optional()
 });
 
-export function createTaskRouter(taskService: TaskService): Router {
+export function createTaskRouter(taskService: TaskService, verifier: OAuthTokenVerifier): Router {
   const router = Router();
 
-  router.get('/', async (_req, res, next) => {
+  router.get('/', requireRestScope(verifier, 'tasks:read'), async (_req, res, next) => {
     try {
       res.json({ tasks: await taskService.list() });
     } catch (error) {
@@ -21,7 +23,7 @@ export function createTaskRouter(taskService: TaskService): Router {
     }
   });
 
-  router.post('/', async (req, res, next) => {
+  router.post('/', requireRestScope(verifier, 'tasks:write'), async (req, res, next) => {
     try {
       const input = createTaskSchema.parse(req.body);
       const task = await taskService.create(input.title);
@@ -31,7 +33,7 @@ export function createTaskRouter(taskService: TaskService): Router {
     }
   });
 
-  router.get('/:id', async (req, res, next) => {
+  router.get('/:id', requireRestScope(verifier, 'tasks:read'), async (req, res, next) => {
     try {
       res.json(await taskService.get(req.params.id));
     } catch (error) {
@@ -39,7 +41,7 @@ export function createTaskRouter(taskService: TaskService): Router {
     }
   });
 
-  router.post('/:id/complete', async (req, res, next) => {
+  router.post('/:id/complete', requireRestScope(verifier, 'tasks:write'), async (req, res, next) => {
     try {
       const input = completeTaskSchema.parse(req.body ?? {});
       res.json(await taskService.complete(req.params.id, input.expectedVersion));
