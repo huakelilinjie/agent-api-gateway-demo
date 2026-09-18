@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
+import { IdempotencyConflictError } from '../idempotency/idempotencyStore.js';
 import { OptimisticLockError } from '../repository/inMemoryTaskRepository.js';
 import { TaskNotFoundError, TaskValidationError } from '../services/taskService.js';
 
@@ -17,6 +18,10 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   }
   if (error instanceof TaskNotFoundError) {
     res.status(404).json({ error: 'task_not_found', taskId: error.taskId });
+    return;
+  }
+  if (error instanceof IdempotencyConflictError) {
+    res.status(409).json({ error: 'idempotency_conflict', key: error.key });
     return;
   }
   if (error instanceof OptimisticLockError) {
